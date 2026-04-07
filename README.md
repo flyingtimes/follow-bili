@@ -27,14 +27,25 @@ follow-bili/
 └── .env            # 环境变量（WECHAT_TARGET）
 ```
 
-## 使用方法
+## 安装与运行
+
+本项目使用 [uv](https://docs.astral.sh/uv/) 管理 Python 环境和依赖。
 
 ```bash
+# 安装 uv（如未安装）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 克隆项目并进入目录
+git clone <repo-url> && cd follow-bili
+
+# 创建虚拟环境并安装依赖
+uv sync
+
 # 运行完整流程
-python3 main.py
+uv run python main.py
 
 # 查看数据库中的所有视频记录
-python3 main.py list
+uv run python main.py list
 ```
 
 ## 依赖

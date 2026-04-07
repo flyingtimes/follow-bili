@@ -1,0 +1,11 @@
+[project]
+name = "follow-bili"
+version = "0.1.0"
+description = "Fetch bilibili followed creators' videos, download, transcribe, and summarize."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mlx-whisper",
+    "python-dotenv",
+    "huggingface_hub",
+]

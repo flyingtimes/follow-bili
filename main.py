@@ -214,12 +214,12 @@ def summarize_and_send(transcript_path, title, audio_path):
     with open(transcript_path, "r", encoding="utf-8") as f:
         transcript_text = f.read()
 
-    # Call openclaw agent to summarize
+    # Call Claude to summarize
     prompt = f"请不要有其他想法，直接对我给的文本进行简要综述，用中文回复，控制在300字以内：\n\n{transcript_text}"
-    print(f"  Summarizing via openclaw agent...")
+    print(f"  Summarizing via Claude...")
     result = subprocess.run(
-        ["openclaw", "agent", "--agent", "main", "--message", prompt, "--timeout", "120"],
-        capture_output=True, text=True, timeout=180
+        ["claude", "-p", prompt, "--output-format", "text", "--model", "claude-sonnet-4-20250514"],
+        capture_output=True, text=True, timeout=120
     )
     if result.returncode != 0:
         print(f"  [ERROR] Summarization failed: {result.stderr.strip()}")
@@ -235,21 +235,32 @@ def summarize_and_send(transcript_path, title, audio_path):
         f.write(f"【{title}】\n\n{summary_text}")
     print(f"  Summary saved: {summary_path}")
 
-    # Send to WeChat
-    summary_abs = os.path.abspath(summary_path)
+    # Send to WeChat: text first, then audio
     audio_abs = os.path.abspath(audio_path)
-    send_result = subprocess.run(
+    # 1) Send text summary
+    text_result = subprocess.run(
         ["openclaw", "message", "send",
          "--channel", "openclaw-weixin",
          "--target", WECHAT_TARGET,
-         "--media", audio_abs,
-         "--message", summary_text],
+         "--message", f"【{title}】\n{summary_text}"],
         capture_output=True, text=True
     )
-    if send_result.returncode != 0:
-        print(f"  [ERROR] WeChat send failed: {send_result.stderr.strip()}")
+    if text_result.returncode != 0:
+        print(f"  [ERROR] WeChat text send failed: {text_result.stderr.strip()}")
     else:
-        print(f"  Summary sent to WeChat.")
+        print(f"  Summary text sent to WeChat.")
+    # 2) Send audio file
+    audio_result = subprocess.run(
+        ["openclaw", "message", "send",
+         "--channel", "openclaw-weixin",
+         "--target", WECHAT_TARGET,
+         "--media", audio_abs],
+        capture_output=True, text=True
+    )
+    if audio_result.returncode != 0:
+        print(f"  [ERROR] WeChat audio send failed: {audio_result.stderr.strip()}")
+    else:
+        print(f"  Audio sent to WeChat.")
 
     return summary_path
 

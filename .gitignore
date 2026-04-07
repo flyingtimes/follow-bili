@@ -8,3 +8,5 @@ video/
 transcript/
 summary/
 videos.db
+.venv/
+uv.lock
