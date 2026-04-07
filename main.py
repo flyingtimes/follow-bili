@@ -23,7 +23,10 @@ SUMMARY_DIR = "summary"
 
 from dotenv import load_dotenv
 load_dotenv()
-WECHAT_TARGET = os.environ["WECHAT_TARGET"]
+WECHAT_TARGET = os.environ.get("WECHAT_TARGET", "").strip()
+if not WECHAT_TARGET:
+    print("[ERROR] WECHAT_TARGET is not set. Please configure .env file.")
+    sys.exit(1)
 MLX_MODEL = "mlx-community/whisper-large-v3-turbo"
 
 
@@ -75,7 +78,8 @@ def read_usernames():
         reader = csv.reader(f)
         for row in reader:
             name = row[0].strip() if row else ""
-            if name:
+            # Filter out names with shell-special or path-traversal characters
+            if name and not re.search(r'[<>&|;$`\\\'\"!\n\r]', name) and ".." not in name:
                 usernames.append(name)
     return usernames
 
@@ -161,10 +165,16 @@ def download_video(vid):
     return None
 
 
+def _safe_basename(path):
+    """Return basename with path-traversal characters removed."""
+    name = os.path.splitext(os.path.basename(path))[0]
+    return name.replace("/", "").replace("\\", "").replace("..", "")
+
+
 def extract_audio(video_path):
     """Extract audio from video using ffmpeg, return audio path or None."""
     os.makedirs(AUDIO_DIR, exist_ok=True)
-    basename = os.path.splitext(os.path.basename(video_path))[0]
+    basename = _safe_basename(video_path)
     audio_path = os.path.join(AUDIO_DIR, f"{basename}.mp3")
 
     result = subprocess.run(
@@ -180,7 +190,7 @@ def extract_audio(video_path):
 def transcribe_audio(audio_path):
     """Transcribe audio using mlx-whisper (Apple Silicon optimized), return transcript path or None."""
     os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
-    basename = os.path.splitext(os.path.basename(audio_path))[0]
+    basename = _safe_basename(audio_path)
     transcript_path = os.path.join(TRANSCRIPT_DIR, f"{basename}.txt")
 
     try:
@@ -207,12 +217,15 @@ def transcribe_audio(audio_path):
 def summarize_and_send(transcript_path, title, audio_path):
     """Summarize transcript via openclaw agent, save summary, send to WeChat."""
     os.makedirs(SUMMARY_DIR, exist_ok=True)
-    basename = os.path.splitext(os.path.basename(transcript_path))[0]
+    basename = _safe_basename(transcript_path)
     summary_path = os.path.join(SUMMARY_DIR, f"{basename}.txt")
 
-    # Read transcript content
+    # Read transcript content, cap to prevent excessively large prompts
     with open(transcript_path, "r", encoding="utf-8") as f:
-        transcript_text = f.read()
+        transcript_text = f.read(50000)
+
+    # Sanitize title for display
+    safe_title = title.replace("\n", " ").replace("\r", "")[:200]
 
     # Call Claude to summarize
     prompt = f"请不要有其他想法，直接对我给的文本进行简要综述，用中文回复，控制在300字以内：\n\n{transcript_text}"
@@ -232,7 +245,7 @@ def summarize_and_send(transcript_path, title, audio_path):
 
     # Save summary
     with open(summary_path, "w", encoding="utf-8") as f:
-        f.write(f"【{title}】\n\n{summary_text}")
+        f.write(f"【{safe_title}】\n\n{summary_text}")
     print(f"  Summary saved: {summary_path}")
 
     # Send to WeChat: text first, then audio
@@ -242,7 +255,7 @@ def summarize_and_send(transcript_path, title, audio_path):
         ["openclaw", "message", "send",
          "--channel", "openclaw-weixin",
          "--target", WECHAT_TARGET,
-         "--message", f"【{title}】\n{summary_text}"],
+         "--message", f"【{safe_title}】\n{summary_text}"],
         capture_output=True, text=True
     )
     if text_result.returncode != 0:
